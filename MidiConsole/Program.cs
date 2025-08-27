@@ -7,6 +7,10 @@ namespace MidiConsole
     static void Main(string[] args)
     {
       using MidiReader midi = new(@"D:\MIDI\PROJ\Cyber Night\cyber-night.mid");
+      while (true)
+      {
+        midi.ReadNextEventOfTrack(0);
+      }
     }
   }
 }
