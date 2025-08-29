@@ -8,8 +8,8 @@ namespace Midi;
 
 internal static class Helpers
 {
-  public static double MicrosecondsPerQuarterNoteToBPM(int microsecondsPerQuarterNote)
+  public static decimal MicrosecondsPerQuarterNoteToBPM(int microsecondsPerQuarterNote)
   {
-    return 1d / microsecondsPerQuarterNote * 60 * 1_000_000;
+    return (decimal)1 / microsecondsPerQuarterNote * 60 * 1_000_000;
   }
 }

@@ -6,7 +6,4 @@ using System.Threading.Tasks;
 
 namespace Midi;
 
-public interface IEvent
-{
-  public int DeltaTime { get; }
-}
+public readonly record struct MidiKeyStatus(bool Pressed, byte Velocity);
