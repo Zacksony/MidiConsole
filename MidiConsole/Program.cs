@@ -8,12 +8,12 @@ internal class Program
   static void Main(string[] args)
   {
     //string midiFilePath = @"D:\MIDI\PROJ\Cyber Night\cyber-night.mid";
-    string midiFilePath = @"D:\MIDI\Black MIDIs\EVANS_ZUMN_finished_AS.mid";
+    string midiFilePath = @"D:\MIDI\Black MIDIs\chronimia_FINAL.mid";
     byte[] midiBytes = File.ReadAllBytes(midiFilePath);
     using MemoryStream midiStream = new(midiBytes);      
     using MidiReader midi = new(midiStream);
 
-    AnimatedConsole animeConsole = new(128, 24);
+    AnimatedConsole animeConsole = new(width: 128, height: 17, targetFps: 60, title: "MidiConsole");
 
     Task drawingTask = Task.Run(() =>
     {
