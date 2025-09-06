@@ -28,9 +28,15 @@ public unsafe class MidiReader : IDisposable
   private long           _currentTick = 0;
   private int[]          _ticksForNextEvent;
   private long[]         _currentTrackPositions = null!;
+  private string         _currentSongNameText = string.Empty;
   private string         _currentCopyrightText = string.Empty;
   private int            _currentMicrosecondsPerQuarterNote = 500_000; // = 120 bpm for default
+  private byte           _currentSignatureNumerator = 4;
+  private byte           _currentSignatureDenominator  = 4;
   private ChannelState[] _currentChannelStates = ChannelState.CreateArray(ChannelCount);
+  private byte[]         _currentStatusBytesByTrack = null!;
+  private long           _currentNoteCount = 0;
+  private long           _currentEventCount = 0;
 
   public MidiReader(string filePath) : this(File.OpenRead(filePath), true) { }
 
@@ -41,6 +47,7 @@ public unsafe class MidiReader : IDisposable
     ReadHeader();
     GetTrackPositions();
     _ticksForNextEvent = new int[_trackCount];
+    _currentStatusBytesByTrack = new byte[_trackCount];
   }
 
   public short MidiFormat => _midiFormat;
@@ -53,22 +60,35 @@ public unsafe class MidiReader : IDisposable
 
   public string CurrentCopyrightText => _currentCopyrightText;
 
+  public string CurrentSongNameText => _currentSongNameText;
+
   public int CurrentMicrosecondsPerQuarterNote => _currentMicrosecondsPerQuarterNote;
 
   public decimal CurrentMillisecondsPerTick => ((decimal)1 / _ticksPerQuarterNote) * CurrentMicrosecondsPerQuarterNote / 1000;
 
   public decimal CurrentBPM => Helpers.MicrosecondsPerQuarterNoteToBPM(_currentMicrosecondsPerQuarterNote);
 
+  public byte CurrentSignatureNumerator => _currentSignatureNumerator;
+
+  public byte CurrentSignatureDenominator => _currentSignatureDenominator;
+
+  public long CurrentNoteCount => _currentNoteCount;
+
+  public long CurrentEventCount => _currentEventCount;
+
   public IReadOnlyList<IReadOnlyChannelState> CurrentChannelStates => _currentChannelStates;
 
   // TODO: current拍号
 
-  public int ReadNextEvents()
+  public int ReadNextEvents(out IReadOnlyList<IEvent> events)
   {
+    List<IEvent> eventList = [];
+    events = eventList;
+
     if (_trackCount == 0)
     {
       return 0;
-    }
+    }    
 
     int minTicksForNextEvent = int.MaxValue;
 
@@ -79,8 +99,9 @@ public unsafe class MidiReader : IDisposable
         continue;
       }
 
-      while (_ticksForNextEvent[iTrack] == 0 && ReadNextEventOfTrack(iTrack) is IEvent @event)
-      {
+      while (_ticksForNextEvent[iTrack] == 0 && ReadEvent(iTrack) is IEvent @event)
+      {        
+        eventList.Add(@event);
         UpdateStateFromEvent(@event);
         _ticksForNextEvent[iTrack] = PeekNextEventDeltaTime(iTrack);
       }
@@ -88,7 +109,7 @@ public unsafe class MidiReader : IDisposable
       if (_ticksForNextEvent[iTrack] > 0)
       {
         minTicksForNextEvent = minTicksForNextEvent > _ticksForNextEvent[iTrack] ? _ticksForNextEvent[iTrack] : minTicksForNextEvent;
-      }   
+      }
     }
 
     if (minTicksForNextEvent == int.MaxValue)
@@ -101,6 +122,7 @@ public unsafe class MidiReader : IDisposable
       _ticksForNextEvent[i] -= minTicksForNextEvent;
     }
     _currentTick += minTicksForNextEvent;
+
     return minTicksForNextEvent;
   }
 
@@ -115,6 +137,7 @@ public unsafe class MidiReader : IDisposable
 
   private void UpdateStateFromEvent(IEvent @event)
   {
+    _currentEventCount++;
     switch (@event)
     {
       case UnhandledEvent e:
@@ -129,6 +152,7 @@ public unsafe class MidiReader : IDisposable
       break;
       case NoteOnMidiEvent e:
       {
+        _currentNoteCount++;
         _currentChannelStates[e.ChannelNo].SetNoteOn(e.Key, e.Velocity);
       }
       break;
@@ -162,6 +186,14 @@ public unsafe class MidiReader : IDisposable
 
       }
       break;
+      case SeqNameMetaEvent e:
+      {
+        if (e.TrackIndex == 0)
+        {
+          _currentSongNameText = e.Text;
+        }
+      }
+      break;
       case CopyrightMetaEvent e:
       {
         _currentCopyrightText = e.Text;
@@ -170,6 +202,12 @@ public unsafe class MidiReader : IDisposable
       case TempoMetaEvent e:
       {
         _currentMicrosecondsPerQuarterNote = e.MicrosecondsPerQuarterNote;
+      }
+      break;
+      case TimeSignatureMetaEvent e:
+      {
+        _currentSignatureNumerator = e.Numerator;
+        _currentSignatureDenominator = e.Denominator;
       }
       break;
     }
@@ -189,164 +227,204 @@ public unsafe class MidiReader : IDisposable
     return -1;
   }
 
-  private IEvent? ReadNextEventOfTrack(short trackIndex)
+  private IEvent? ReadEvent(short trackIndex)
   {
     _baseStream.Position = _currentTrackPositions[trackIndex];
 
-    if (_baseStream.Position < _trackStartPositionAndLengths[trackIndex].Position + _trackStartPositionAndLengths[trackIndex].Length)
+    if (_baseStream.Position >= _trackStartPositionAndLengths[trackIndex].Position + _trackStartPositionAndLengths[trackIndex].Length)
     {
-      IEvent @event = ReadEvent();
-      _currentTrackPositions[trackIndex] = _baseStream.Position;
-      return @event;
-    }
+      return null;
+    }   
 
-    return null;
-  }  
-
-  private IEvent ReadEvent()
-  {
-    int deltaTime = ReadVarInt();
-    byte firstByte = ReadByte();
-
-    // Meta Event
-    if (firstByte == 0xFF)
+    try
     {
-      byte metaEventType = ReadByte();
-      int metaEventDataLength = ReadVarInt();      
-      Span<byte> metaEventData = new byte[metaEventDataLength];
-      if (metaEventDataLength != 0)
-      {
-        ReadBytes(metaEventData);
-      }
+      int deltaTime = ReadVarInt();
+      byte firstByte = ReadByte();
+      byte firstBit = (byte)(firstByte & 0b1000_0000);
 
-      switch (metaEventType)
+      // Meta Event
+      if (firstByte == 0xFF)
       {
-        case 0x01:
-        case 0x03:
-        case 0x04:
-        case 0x05:
-        case 0x06:
-        case 0x07:
+        byte metaEventType = ReadByte();
+        int metaEventDataLength = ReadVarInt();
+        Span<byte> metaEventData = new byte[metaEventDataLength];
+        if (metaEventDataLength != 0)
+        {
+          ReadBytes(metaEventData);
+        }
+
+        switch (metaEventType)
+        {
+          case 0x01:
+          case 0x04:
+          case 0x05:
+          case 0x06:
+          case 0x07:
           {
-            return new TextMetaEvent(deltaTime, Encoding.UTF8.GetString(metaEventData));
+            return new TextMetaEvent(deltaTime, trackIndex, Encoding.UTF8.GetString(metaEventData));
           }
-        case 0x02:
+          case 0x02:
           {
-            return new CopyrightMetaEvent(deltaTime, Encoding.UTF8.GetString(metaEventData));
+            return new CopyrightMetaEvent(deltaTime, trackIndex, Encoding.UTF8.GetString(metaEventData));
           }
-        case 0x51:
+          case 0x03:
+          {
+            return new SeqNameMetaEvent(deltaTime, trackIndex, Encoding.UTF8.GetString(metaEventData));
+          }
+          case 0x51:
           {
             if (metaEventDataLength == 3)
             {
-              return new TempoMetaEvent(deltaTime, (metaEventData[0] << 16) | (metaEventData[1] << 8) | (metaEventData[2]));
+              return new TempoMetaEvent(deltaTime, trackIndex, (metaEventData[0] << 16) | (metaEventData[1] << 8) | (metaEventData[2]));
             }
             else
             {
-              return new UnhandledEvent(deltaTime);
+              return new UnhandledEvent(deltaTime, trackIndex);
             }
           }
-        default:
-          return new UnhandledEvent(deltaTime);
+          case 0x58:
+          {
+            if (metaEventDataLength == 4)
+            {
+              byte denominator = metaEventData[1] switch
+              {
+                1 => 2,
+                2 => 4,
+                3 => 8,
+                4 => 16,
+                5 => 32,
+                6 => 64,
+                7 => 128,
+                _ => 4
+              };
+              return new TimeSignatureMetaEvent(deltaTime, trackIndex, metaEventData[0], denominator);
+            }
+            else
+            {
+              return new UnhandledEvent(deltaTime, trackIndex);
+            }
+          }
+          default:
+          return new UnhandledEvent(deltaTime, trackIndex);
+        }
       }
-    }
 
-    // SysEx Event (暂不处理)
-    else if (firstByte == 0xF0 || firstByte == 0xF7)
-    {
-      int sysExEventDataLength = ReadVarInt();      
-      Span<byte> sysExEventData = new byte[sysExEventDataLength];
-      if (sysExEventDataLength != 0)
+      // SysEx Event (暂不处理)
+      else if (firstByte == 0xF0 || firstByte == 0xF7)
       {
-        ReadBytes(sysExEventData);
+        int sysExEventDataLength = ReadVarInt();
+        Span<byte> sysExEventData = new byte[sysExEventDataLength];
+        if (sysExEventDataLength != 0)
+        {
+          ReadBytes(sysExEventData);
+        }
+        return new UnhandledEvent(deltaTime, trackIndex);
       }
-      return new UnhandledEvent(deltaTime);
-    }
 
-    else if (firstByte == 0xF2)
-    {
-      ReadInt16();
-      return new UnhandledEvent(deltaTime);
-    }
-
-    else if (firstByte == 0xF3)
-    {
-      ReadByte();
-      return new UnhandledEvent(deltaTime);
-    }
-
-    // Midi Event
-    else
-    {
-      byte midiEventType = (byte)(firstByte & 0b1111_0000);
-      byte channelNo = (byte)(firstByte & 0b0000_1111);
-
-      switch (midiEventType)
+      else if (firstByte == 0xF2)
       {
-        // Note Off
-        case 0b1000_0000:
+        ReadInt16();
+        return new UnhandledEvent(deltaTime, trackIndex);
+      }
+
+      else if (firstByte == 0xF3)
+      {
+        ReadByte();
+        return new UnhandledEvent(deltaTime, trackIndex);
+      }
+
+      // Midi Event
+      else
+      {
+        byte midiStatusByte;
+        byte midiEventType;
+        byte channelNo;
+
+        if (firstBit == 0b0000_0000)
+        {
+          midiStatusByte = _currentStatusBytesByTrack[trackIndex];
+          _baseStream.Position--;
+        }
+        else
+        {
+          _currentStatusBytesByTrack[trackIndex] = midiStatusByte = firstByte;
+        } 
+          
+        midiEventType = (byte)(midiStatusByte & 0b1111_0000);
+        channelNo = (byte)(midiStatusByte & 0b0000_1111);
+
+        switch (midiEventType)
+        {
+          // Note Off
+          case 0b1000_0000:
           {
             byte key = ReadByte();
             byte vel = ReadByte();
 
-            return new NoteOffMidiEvent(deltaTime, channelNo, key, vel);
+            return new NoteOffMidiEvent(deltaTime, trackIndex, channelNo, key, vel);
           }
 
-        // Note On
-        case 0b1001_0000:
+          // Note On
+          case 0b1001_0000:
           {
             byte key = ReadByte();
             byte vel = ReadByte();
 
-            return new NoteOnMidiEvent(deltaTime, channelNo, key, vel);
+            return new NoteOnMidiEvent(deltaTime, trackIndex, channelNo, key, vel);
           }
 
-        // Polyphonic After-touch
-        case 0b1010_0000:
+          // Polyphonic After-touch
+          case 0b1010_0000:
           {
             byte key = ReadByte();
             byte pressure = ReadByte();
 
-            return new PolyphonicAftertouchMidiEvent(deltaTime, channelNo, key, pressure);
+            return new PolyphonicAftertouchMidiEvent(deltaTime, trackIndex, channelNo, key, pressure);
           }
 
-        // Control Change
-        case 0b1011_0000:
+          // Control Change
+          case 0b1011_0000:
           {
-            byte ccNo = ReadByte(); 
+            byte ccNo = ReadByte();
             byte value = ReadByte();
 
-            return new ControlChangeMidiEvent(deltaTime, channelNo, ccNo, value);
+            return new ControlChangeMidiEvent(deltaTime, trackIndex, channelNo, ccNo, value);
           }
 
-        // Program Change
-        case 0b1100_0000:
+          // Program Change
+          case 0b1100_0000:
           {
             byte pcNo = ReadByte();
 
-            return new ProgramChangeMidiEvent(deltaTime, channelNo, pcNo);
+            return new ProgramChangeMidiEvent(deltaTime, trackIndex, channelNo, pcNo);
           }
 
-        // After-touch
-        case 0b1101_0000:
+          // After-touch
+          case 0b1101_0000:
           {
             byte pressure = ReadByte();
 
-            return new AftertouchMidiEvent(deltaTime, channelNo, pressure);
+            return new AftertouchMidiEvent(deltaTime, trackIndex, channelNo, pressure);
           }
 
-        // Pitch Wheel Change
-        case 0b1110_0000:
+          // Pitch Wheel Change
+          case 0b1110_0000:
           {
             byte low7 = ReadByte();
             byte high7 = ReadByte();
             short value = (short)((high7 << 7) | low7);
 
-            return new PitchChangeMidiEvent(deltaTime, channelNo, value);
+            return new PitchChangeMidiEvent(deltaTime, trackIndex, channelNo, value, low7, high7);
           }
 
-        default:
-          return new UnhandledEvent(deltaTime);
+          default:
+          return new UnhandledEvent(deltaTime, trackIndex);
+        }
       }
+    }
+    finally
+    {
+      _currentTrackPositions[trackIndex] = _baseStream.Position;
     }
   }
 

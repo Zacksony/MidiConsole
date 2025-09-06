@@ -4,7 +4,7 @@ using System.Text;
 
 namespace MidiConsole;
 
-public class AnimatedConsole
+public class CoolConsole
 {
   const int GWL_STYLE = -16;
   const int WS_SIZEBOX = 0x00040000;
@@ -30,7 +30,7 @@ public class AnimatedConsole
 
   public int Height => _height;
 
-  public AnimatedConsole(int width = 40, int height = 20, int targetFps = 60, string title = "AnimatedConsole")
+  public CoolConsole(int width = 40, int height = 20, int targetFps = 60, string title = "AnimatedConsole")
   {
     _width = width;
     _height = height;
@@ -47,30 +47,21 @@ public class AnimatedConsole
     Console.SetWindowSize(width, height);
     Console.SetBufferSize(width, height);
     Console.CursorVisible = false;
-
+    Console.OutputEncoding = Encoding.Unicode;
     Console.Title = title;
   }
 
-  public void Start(Action<StringBuilder> drawAction)
+  public void Start(Action tick)
   {
     _isRunning = true;
 
     while (_isRunning)
     {
-      _stopwatch.Restart();
+      _stopwatch.Restart();      
 
-      StringBuilder buffer = new(_width * _height);
-      drawAction.Invoke(buffer);
+      tick.Invoke();
 
-      Console.SetCursorPosition(0, 0);
-      Console.Write(buffer.ToString());
-
-      _stopwatch.Stop();
-      double elapsed = _stopwatch.Elapsed.TotalMilliseconds;
-      if (elapsed < _frameTime)
-      {
-        Thread.Sleep((int)(_frameTime - elapsed));
-      }
+      while (_stopwatch.Elapsed.TotalMilliseconds < _frameTime) { /* Spin */ } 
     }
   }
 

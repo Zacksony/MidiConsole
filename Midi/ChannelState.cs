@@ -11,9 +11,11 @@ internal class ChannelState : IReadOnlyChannelState
 {
   public const int KeyCount = 128;
 
-  public MidiKeyStatus[] Keys { get; } = new MidiKeyStatus[KeyCount];
+  public MidiKeyStatus[] KeysStatus { get; private set; } = new MidiKeyStatus[KeyCount];
 
-  public Dictionary<byte, byte> ControlChanges { get; } = [];
+  public UInt128 KeysPressed { get; private set; } = 0;
+
+  public Dictionary<byte, byte> ControlChanges { get; private set; } = [];
 
   public byte ProgramChange { get; set; }
 
@@ -31,16 +33,31 @@ internal class ChannelState : IReadOnlyChannelState
 
   public void SetNoteOn(byte key, byte velocity)
   {
-    Keys[key] = new(true, velocity);
+    KeysStatus[key] = new(true, velocity);
+    KeysPressed |= (UInt128)1 << key;
   }
 
   public void SetNoteOff(byte key)
   {
-    Keys[key] = new(false, 0);
+    KeysStatus[key] = new(false, 0);
+    KeysPressed &= ~((UInt128)1 << key);
   }
 
-  IReadOnlyList<MidiKeyStatus> IReadOnlyChannelState.Keys => Keys;
+  public IReadOnlyChannelState DeepClone()
+  {
+    ChannelState state = new()
+    {
+      KeysStatus = [.. KeysStatus],
+      ControlChanges = ControlChanges.ToDictionary(),
+      ProgramChange = ProgramChange,
+      PitchChange = PitchChange
+    };
+    return state;
+  }
+
+  IReadOnlyList<MidiKeyStatus> IReadOnlyChannelState.KeysStatus => KeysStatus;
   IReadOnlyDictionary<byte, byte> IReadOnlyChannelState.ControlChanges => ControlChanges;
+  UInt128 IReadOnlyChannelState.KeysPressed => KeysPressed;
   byte IReadOnlyChannelState.ProgramChange => ProgramChange;
   short IReadOnlyChannelState.PitchChange => PitchChange;
 }

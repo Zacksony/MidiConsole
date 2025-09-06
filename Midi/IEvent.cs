@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Midi;
+﻿namespace Midi;
 
 public interface IEvent
 {
+  public short TrackIndex { get; }
   public int DeltaTime { get; }
 }
