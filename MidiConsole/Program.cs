@@ -9,10 +9,10 @@ namespace MidiConsole;
 
 internal static class Program
 {
-  private readonly static bool EnableAudio = true;
+  private readonly static bool EnableAudio = false;
   static void Main(string[] args)
   {
-    //string midiFilePath = @"D:\MIDI\PROJ\Cyber Night\cyber-night.mid";
+    string midiFilePath = @"D:\MIDI\PROJ\Cyber Night\cyber-night.mid";
     //string midiFilePath = @"D:\MIDI\MIDIs\Piano Songs\TB\THE ULTIMATE 200 ANIME SONGS PIANO MEDLEY [with l.mid";
     //string midiFilePath = @"D:\MIDI\Black MIDIs\EVANS_ZUMN_finished_AS.mid";
     //string midiFilePath = @"D:\MIDI\MIDIs\Abstract64-CarveYourOwnPath.msgs.mid";
@@ -26,7 +26,7 @@ internal static class Program
     //string midiFilePath = @"D:\MIDI\Huge MIDIs\反氯化苯2.mid";
     //string midiFilePath = @"D:\MIDI\Black MIDIs\真っ黒フランドール・S 修正版.mid";
     //string midiFilePath = @"D:\MIDI\PROJ\Chain\Chain.mid";
-    string midiFilePath = @"D:\MIDI\MIDIs\メドレーに命をかけて.mid";
+    //string midiFilePath = @"D:\MIDI\MIDIs\メドレーに命をかけて.mid";
 
     byte[] midiBytes = File.ReadAllBytes(midiFilePath);
     using MemoryStream midiStream = new(midiBytes);

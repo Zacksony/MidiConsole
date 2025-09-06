@@ -49,16 +49,37 @@ public class MidiConsoleVisualizer
     }
   }
 
-  private static byte[] KeyBlackWhites =
+  private record struct ControlInfoHighLightFadeTimer
+  (
+    int Pc        ,
+    int Vol       ,
+    int Exp       ,
+    int Pitch     ,
+    int PitchRange,
+    int Mod       ,
+    int Panpot    ,
+    int Cutoff    ,
+    int Reso      ,
+    int Att       ,
+    int Dec       ,
+    int Rel       
+  );
+
+  private const int MaxControlHighLightFadeTime = 20;
+  private const int MaxKeyboardFadeTime = 6;
+
+  private readonly static IReadOnlyList<int> KeyBlackWhites =
   [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1];
 
   private CoolConsole _console;
   private MidiReader _midi;
   private IReadOnlyChannelState[] _previousChannelStates = [.. Enumerable.Repeat(IReadOnlyChannelState.Default, MidiReader.ChannelCount)];
+  private ControlInfoHighLightFadeTimer[] _controlFadeTimers = new ControlInfoHighLightFadeTimer[MidiReader.ChannelCount];
+  private int[,] _keyboardFadeTimers = new int[MidiReader.ChannelCount + 1, 128];
 
   public MidiConsoleVisualizer(MidiReader midiReader)
   {
-    _console = new(width: 148, height: 40, targetFps: 120, title: "MidiConsole");
+    _console = new(width: 148, height: 40, targetFps: 60, title: "MidiConsole");
     _midi = midiReader;
   }
 
@@ -76,7 +97,6 @@ public class MidiConsoleVisualizer
     string colorCol1 = "\u001b[48;2;60;60;60m";
 
     string colorCCDefault = "\u001b[48;2;12;12;12m\u001b[38;2;164;164;164m";
-    string colorCCHighlight = "\u001b[48;2;144;144;128m\u001b[38;2;240;240;200m";
     string colorForeGray = "\u001b[38;2;180;180;180m";
     string colorForeLightGray = "\u001b[38;2;240;240;216m";
     string colorForeSemiDark = "\u001b[38;2;120;120;120m";
@@ -120,31 +140,55 @@ public class MidiConsoleVisualizer
     Console.CursorLeft = 1;
     Console.CursorTop += 2;
     UInt128 mergedKeysPressed = 0;
+
     foreach ((int channelIndex, IReadOnlyChannelState channelState) in _midi.CurrentChannelStates.Index())
     {
       Console.CursorLeft = 1;
       Console.Write($"{colorForeGray}CH{channelIndex + 1:00}");
 
       Console.CursorLeft = 6;
-      Console.Write(GetKeysString(channelState.KeysStatus));
+      for (int key = 0; key < 128; key++)
+      {
+        if (channelState.KeysStatus[key].Pressed)
+        {
+          _keyboardFadeTimers[channelIndex + 1, key] = MaxKeyboardFadeTime;
+        }
+        else
+        {
+          _keyboardFadeTimers[channelIndex + 1, key] = int.Max(0, _keyboardFadeTimers[channelIndex + 1, key] - 1);
+        }
+      }
+      Console.Write(GetKeysString(channelState.KeysStatus, channelIndex + 1));
 
       Console.CursorLeft = 71;
       ControlInfo previous = ControlInfo.FromChannelState(_previousChannelStates[channelIndex]);
       ControlInfo current = ControlInfo.FromChannelState(channelState);
+      _controlFadeTimers[channelIndex].Pc = previous.Pc == current.Pc ? int.Max(0, _controlFadeTimers[channelIndex].Pc - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Vol = previous.Vol == current.Vol ? int.Max(0, _controlFadeTimers[channelIndex].Vol - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Exp = previous.Exp == current.Exp ? int.Max(0, _controlFadeTimers[channelIndex].Exp - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Pitch = previous.Pitch == current.Pitch ? int.Max(0, _controlFadeTimers[channelIndex].Pitch - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].PitchRange = previous.PitchRange == current.PitchRange ? int.Max(0, _controlFadeTimers[channelIndex].PitchRange - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Mod = previous.Mod == current.Mod ? int.Max(0, _controlFadeTimers[channelIndex].Mod - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Panpot = previous.Panpot == current.Panpot ? int.Max(0, _controlFadeTimers[channelIndex].Panpot - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Cutoff = previous.Cutoff == current.Cutoff ? int.Max(0, _controlFadeTimers[channelIndex].Cutoff - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Reso = previous.Reso == current.Reso ? int.Max(0, _controlFadeTimers[channelIndex].Reso - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Att = previous.Att == current.Att ? int.Max(0, _controlFadeTimers[channelIndex].Att - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Dec = previous.Dec == current.Dec ? int.Max(0, _controlFadeTimers[channelIndex].Dec - 1) : MaxControlHighLightFadeTime;
+      _controlFadeTimers[channelIndex].Rel = previous.Rel == current.Rel ? int.Max(0, _controlFadeTimers[channelIndex].Rel - 1) : MaxControlHighLightFadeTime;
       Console.Write($"{colorCCDefault}" +
-                    $"{colorCCDefault}{(previous.Pc == current.Pc ? colorCCDefault : colorCCHighlight)} {current.Pc:000} " +
-                    $"{colorCCDefault}{(previous.Vol == current.Vol ? colorCCDefault : colorCCHighlight)} {current.Vol,3} " +
-                    $"{colorCCDefault}{(previous.Exp == current.Exp ? colorCCDefault : colorCCHighlight)} {current.Exp,3} " +
-                    $"{colorCCDefault}{(previous.Panpot == current.Panpot ? colorCCDefault : colorCCHighlight)} {(current.Panpot < 0 ? "-" : (current.Panpot == 0 ? " " : "+"))}{sbyte.Abs(current.Panpot),2} " +
-                    $"{colorCCDefault}{(previous.Pitch == current.Pitch ? colorCCDefault : colorCCHighlight)}  {(current.Pitch < 0 ? "-" : (current.Pitch == 0 ? " " : "+"))}{short.Abs(current.Pitch),4}  " +
-                    $"{colorCCDefault}{(previous.PitchRange == current.PitchRange ? colorCCDefault : colorCCHighlight)}    {current.PitchRange,3}   " +
-                    $"{colorCCDefault}{(previous.Mod == current.Mod ? colorCCDefault : colorCCHighlight)} {current.Mod,3} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Pc)} {current.Pc:000} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Vol)} {current.Vol,3} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Exp)} {current.Exp,3} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Panpot)} {(current.Panpot < 0 ? "-" : (current.Panpot == 0 ? " " : "+"))}{sbyte.Abs(current.Panpot),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Pitch)}  {(current.Pitch < 0 ? "-" : (current.Pitch == 0 ? " " : "+"))}{short.Abs(current.Pitch),4}  " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].PitchRange)}    {current.PitchRange,3}   " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Mod)} {current.Mod,3} " +
                     $"{colorCCDefault} {(current.Hold ? $"\u001b[38;2;240;240;200m{new string(FullBlock.ToChar(), 4)}" : $"{colorForeSemiDark}{new string(Shade1.ToChar(), 4)}")} " +
-                    $"{colorCCDefault}{(previous.Cutoff == current.Cutoff ? colorCCDefault : colorCCHighlight)} {(current.Cutoff < 0 ? "-" : (current.Cutoff == 0 ? " " : "+"))}{sbyte.Abs(current.Cutoff),2} " +
-                    $"{colorCCDefault}{(previous.Reso == current.Reso ? colorCCDefault : colorCCHighlight)}  {(current.Reso < 0 ? "-" : (current.Reso == 0 ? " " : "+"))}{sbyte.Abs(current.Reso),2} " +
-                    $"{colorCCDefault}{(previous.Att == current.Att ? colorCCDefault : colorCCHighlight)} {(current.Att < 0 ? "-" : (current.Att == 0 ? " " : "+"))}{sbyte.Abs(current.Att),2} " +
-                    $"{colorCCDefault}{(previous.Dec == current.Dec ? colorCCDefault : colorCCHighlight)} {(current.Dec < 0 ? "-" : (current.Dec == 0 ? " " : "+"))}{sbyte.Abs(current.Dec),2} " +
-                    $"{colorCCDefault}{(previous.Rel == current.Rel ? colorCCDefault : colorCCHighlight)} {(current.Rel < 0 ? "-" : (current.Rel == 0 ? " " : "+"))}{sbyte.Abs(current.Rel),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Cutoff)} {(current.Cutoff < 0 ? "-" : (current.Cutoff == 0 ? " " : "+"))}{sbyte.Abs(current.Cutoff),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Reso)}  {(current.Reso < 0 ? "-" : (current.Reso == 0 ? " " : "+"))}{sbyte.Abs(current.Reso),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Att)} {(current.Att < 0 ? "-" : (current.Att == 0 ? " " : "+"))}{sbyte.Abs(current.Att),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Dec)} {(current.Dec < 0 ? "-" : (current.Dec == 0 ? " " : "+"))}{sbyte.Abs(current.Dec),2} " +
+                    $"{colorCCDefault}{ControlTimerToColor(_controlFadeTimers[channelIndex].Rel)} {(current.Rel < 0 ? "-" : (current.Rel == 0 ? " " : "+"))}{sbyte.Abs(current.Rel),2} " +
                     $"{colorRestore}");
 
       Console.CursorLeft = 1;
@@ -154,29 +198,37 @@ public class MidiConsoleVisualizer
       _previousChannelStates[channelIndex] = channelState.DeepClone();
     }
 
-    Console.CursorTop = mergedKeysPosTop;
-    IReadOnlyList<MidiKeyStatus> mergedKeysStatus = KeysPressedToKeysStatus(mergedKeysPressed);
+    Console.CursorTop = mergedKeysPosTop;    
     Console.CursorLeft = 1;
     Console.Write($"{colorForeGray} ALL");
 
     Console.CursorLeft = 6;
-    Console.Write(GetKeysString(mergedKeysStatus, "200;200;200", "200;200;200"));
-  }
-
-  private static IReadOnlyList<MidiKeyStatus> KeysPressedToKeysStatus(UInt128 keysPressed)
-  {
-    MidiKeyStatus[] result = new MidiKeyStatus[128];
-    for (int i = 0; i < 128; i++)
+    MidiKeyStatus[] mergedKeysStatus = KeysPressedToKeysStatus(mergedKeysPressed);
+    for (int key = 0; key < 128; key++)
     {
-      result[i] = new(((keysPressed >> i) & 1) == 1, 1);
+      if (mergedKeysStatus[key].Pressed)
+      {
+        _keyboardFadeTimers[0, key] = MaxKeyboardFadeTime;
+      }
+      else
+      {
+        _keyboardFadeTimers[0, key] = int.Max(0, _keyboardFadeTimers[0, key] - 1);
+      }
     }
-    return result;
+    Console.Write(GetKeysString(mergedKeysStatus, 0, 225, 225, 188));
   }
 
-  private static string GetKeysString(IReadOnlyList<MidiKeyStatus> keys, string keyBlackDownColor = "240;240;216", string keyWhiteDownColor = "240;240;216")
+  private string GetKeysString(IReadOnlyList<MidiKeyStatus> keys, int channelNumber, byte maxR = 225, byte maxG = 225, byte maxB = 188)
   {
-    string keyBlackUpColor = "12;12;12";
-    string keyWhiteUpColor = "28;28;28";
+    byte blackMinR = 12;
+    byte blackMinG = 12;
+    byte blackMinB = 12;
+    byte whiteMinR = 28;
+    byte whiteMinG = 28;
+    byte whiteMinB = 28;
+    
+    string keyWhiteUpColor = $"{whiteMinR};{whiteMinG};{whiteMinB}";
+    string keyBlackUpColor = $"{blackMinR};{blackMinG};{blackMinB}";
 
     StringBuilder sb = new(5120);
     int halfKeyCount = keys.Count / 2;
@@ -188,24 +240,60 @@ public class MidiConsoleVisualizer
       bool isKey1Black = KeyBlackWhites[iKey1 % 12] == 0;
       MidiKeyStatus key0 = keys[i * 2];
       MidiKeyStatus key1 = keys[i * 2 + 1];
-      if (!key0.Pressed && !key1.Pressed)
-      {
-        sb.Append($"\x1b[38;2;{(isKey0Black ? keyBlackUpColor : keyWhiteUpColor)}m\x1b[48;2;{(isKey1Black ? keyBlackUpColor : keyWhiteUpColor)}m{(Q2 | Q3).ToChar()}\x1b[0m");
-      }
-      else if (!key0.Pressed && key1.Pressed)
-      {
-        sb.Append($"\x1b[38;2;{(isKey0Black ? keyBlackUpColor : keyWhiteUpColor)}m\x1b[48;2;{(isKey1Black ? keyBlackDownColor : keyWhiteDownColor)}m{(Q2 | Q3).ToChar()}\x1b[0m");
-      }
-      else if (key0.Pressed && !key1.Pressed)
-      {
-        sb.Append($"\x1b[38;2;{(isKey0Black ? keyBlackDownColor : keyWhiteDownColor)}m\x1b[48;2;{(isKey1Black ? keyBlackUpColor : keyWhiteUpColor)}m{(Q2 | Q3).ToChar()}\x1b[0m");
-      }
-      else if (key0.Pressed && key1.Pressed)
-      {
-        sb.Append($"\x1b[38;2;{(isKey0Black ? keyBlackDownColor : keyWhiteDownColor)}m\x1b[48;2;{(isKey1Black ? keyBlackDownColor : keyWhiteDownColor)}m{(Q2 | Q3).ToChar()}\x1b[0m");
-      }
+      int key0FadeTimer = _keyboardFadeTimers[channelNumber, iKey0];
+      int key1FadeTimer = _keyboardFadeTimers[channelNumber, iKey1];
+      double key0TimerRatio = (double)key0FadeTimer / MaxKeyboardFadeTime;
+      double key1TimerRatio = (double)key1FadeTimer / MaxKeyboardFadeTime;
+      byte key0ColorR = isKey0Black ? (byte)double.Clamp(blackMinR + (maxR - blackMinR) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key0TimerRatio, 0, 255);
+      byte key0ColorG = isKey0Black ? (byte)double.Clamp(blackMinG + (maxR - blackMinG) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key0TimerRatio, 0, 255);
+      byte key0ColorB = isKey0Black ? (byte)double.Clamp(blackMinB + (maxR - blackMinB) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key0TimerRatio, 0, 255);
+      byte key1ColorR = isKey1Black ? (byte)double.Clamp(blackMinR + (maxR - blackMinR) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key1TimerRatio, 0, 255);
+      byte key1ColorG = isKey1Black ? (byte)double.Clamp(blackMinG + (maxR - blackMinG) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key1TimerRatio, 0, 255);
+      byte key1ColorB = isKey1Black ? (byte)double.Clamp(blackMinB + (maxR - blackMinB) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key1TimerRatio, 0, 255);
+      string key0Color = $"{key0ColorR};{key0ColorG};{key0ColorB}";
+      string key1Color = $"{key1ColorR};{key1ColorG};{key1ColorB}";
+
+      sb.Append($"\x1b[38;2;{key0Color}m\x1b[48;2;{key1Color}m{(Q2 | Q3).ToChar()}\x1b[0m");
     }
 
     return sb.ToString();
   }
+
+  private static string ControlTimerToColor(int timer)
+  {
+    double timerRatio = (double)timer / MaxControlHighLightFadeTime;
+
+    byte backMaxR = 144;
+    byte backMaxG = 144;
+    byte backMaxB = 128;
+    byte foreMaxR = 240;
+    byte foreMaxG = 240;
+    byte foreMaxB = 200;
+
+    byte backMinR = 12;
+    byte backMinG = 12;
+    byte backMinB = 12;
+    byte foreMinR = 164;
+    byte foreMinG = 164;
+    byte foreMinB = 164;
+
+    return $"\u001b[48;2;" +
+           $"{(byte)double.Clamp(backMinR + (backMaxR - backMinR) * timerRatio, 0, 255)};" +
+           $"{(byte)double.Clamp(backMinG + (backMaxG - backMinG) * timerRatio, 0, 255)};" +
+           $"{(byte)double.Clamp(backMinB + (backMaxB - backMinB) * timerRatio, 0, 255)}m" +
+           $"\u001b[38;2;" +
+           $"{(byte)double.Clamp(foreMinR + (foreMaxR - foreMinR) * timerRatio, 0, 255)};" +
+           $"{(byte)double.Clamp(foreMinG + (foreMaxG - foreMinG) * timerRatio, 0, 255)};" +
+           $"{(byte)double.Clamp(foreMinB + (foreMaxB - foreMinB) * timerRatio, 0, 255)}m";
+  }
+
+  private static MidiKeyStatus[] KeysPressedToKeysStatus(UInt128 keysPressed)
+  {
+    MidiKeyStatus[] result = new MidiKeyStatus[128];
+    for (int i = 0; i < 128; i++)
+    {
+      result[i] = new(((keysPressed >> i) & 1) == 1, 1);
+    }
+    return result;
+  }  
 }
