@@ -65,7 +65,7 @@ public class MidiConsoleVisualizer
     int Rel       
   );
 
-  private const int MaxControlHighLightFadeTime = 20;
+  private const int MaxControlHighLightFadeTime = 40;
   private const int MaxKeyboardFadeTime = 6;
 
   private readonly static IReadOnlyList<int> KeyBlackWhites =
