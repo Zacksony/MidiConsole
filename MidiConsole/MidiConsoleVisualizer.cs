@@ -65,8 +65,8 @@ public class MidiConsoleVisualizer
     int Rel       
   );
 
-  private const int MaxControlHighLightFadeTime = 40;
-  private const int MaxKeyboardFadeTime = 6;
+  private const int MaxControlHighLightFadeTime = 40; // 40
+  private const int MaxKeyboardFadeTime = 6; // 6
 
   private readonly static IReadOnlyList<int> KeyBlackWhites =
   [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1];
@@ -215,10 +215,10 @@ public class MidiConsoleVisualizer
         _keyboardFadeTimers[0, key] = int.Max(0, _keyboardFadeTimers[0, key] - 1);
       }
     }
-    Console.Write(GetKeysString(mergedKeysStatus, 0, 225, 225, 188));
+    Console.Write(GetKeysString(mergedKeysStatus, 0));
   }
 
-  private string GetKeysString(IReadOnlyList<MidiKeyStatus> keys, int channelNumber, byte maxR = 225, byte maxG = 225, byte maxB = 188)
+  private string GetKeysString(IReadOnlyList<MidiKeyStatus> keys, int channelNumber, byte maxR = 234, byte maxG = 234, byte maxB = 208)
   {
     byte blackMinR = 12;
     byte blackMinG = 12;
@@ -244,12 +244,12 @@ public class MidiConsoleVisualizer
       int key1FadeTimer = _keyboardFadeTimers[channelNumber, iKey1];
       double key0TimerRatio = (double)key0FadeTimer / MaxKeyboardFadeTime;
       double key1TimerRatio = (double)key1FadeTimer / MaxKeyboardFadeTime;
-      byte key0ColorR = isKey0Black ? (byte)double.Clamp(blackMinR + (maxR - blackMinR) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key0TimerRatio, 0, 255);
-      byte key0ColorG = isKey0Black ? (byte)double.Clamp(blackMinG + (maxR - blackMinG) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key0TimerRatio, 0, 255);
-      byte key0ColorB = isKey0Black ? (byte)double.Clamp(blackMinB + (maxR - blackMinB) * key0TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key0TimerRatio, 0, 255);
-      byte key1ColorR = isKey1Black ? (byte)double.Clamp(blackMinR + (maxR - blackMinR) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key1TimerRatio, 0, 255);
-      byte key1ColorG = isKey1Black ? (byte)double.Clamp(blackMinG + (maxR - blackMinG) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key1TimerRatio, 0, 255);
-      byte key1ColorB = isKey1Black ? (byte)double.Clamp(blackMinB + (maxR - blackMinB) * key1TimerRatio, 0, 255) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key1TimerRatio, 0, 255);
+      byte key0ColorR = key0FadeTimer == 0 ? (isKey0Black ? blackMinR : whiteMinR) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key0TimerRatio, 0, 255);
+      byte key0ColorG = key0FadeTimer == 0 ? (isKey0Black ? blackMinG : whiteMinG) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key0TimerRatio, 0, 255);
+      byte key0ColorB = key0FadeTimer == 0 ? (isKey0Black ? blackMinB : whiteMinB) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key0TimerRatio, 0, 255);
+      byte key1ColorR = key1FadeTimer == 0 ? (isKey1Black ? blackMinR : whiteMinR) : (byte)double.Clamp(whiteMinR + (maxR - whiteMinR) * key1TimerRatio, 0, 255);
+      byte key1ColorG = key1FadeTimer == 0 ? (isKey1Black ? blackMinG : whiteMinG) : (byte)double.Clamp(whiteMinG + (maxG - whiteMinG) * key1TimerRatio, 0, 255);
+      byte key1ColorB = key1FadeTimer == 0 ? (isKey1Black ? blackMinB : whiteMinB) : (byte)double.Clamp(whiteMinB + (maxB - whiteMinB) * key1TimerRatio, 0, 255);
       string key0Color = $"{key0ColorR};{key0ColorG};{key0ColorB}";
       string key1Color = $"{key1ColorR};{key1ColorG};{key1ColorB}";
 
@@ -263,12 +263,12 @@ public class MidiConsoleVisualizer
   {
     double timerRatio = (double)timer / MaxControlHighLightFadeTime;
 
-    byte backMaxR = 144;
-    byte backMaxG = 144;
-    byte backMaxB = 128;
-    byte foreMaxR = 240;
-    byte foreMaxG = 240;
-    byte foreMaxB = 200;
+    byte backMaxR = 128;
+    byte backMaxG = 128;
+    byte backMaxB = 110;
+    byte foreMaxR = 255;
+    byte foreMaxG = 255;
+    byte foreMaxB = 255;
 
     byte backMinR = 12;
     byte backMinG = 12;
