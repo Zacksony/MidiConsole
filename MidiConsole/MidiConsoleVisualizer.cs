@@ -97,6 +97,7 @@ public class MidiConsoleVisualizer
     string colorCol1 = "\u001b[48;2;60;60;60m";
 
     string colorCCDefault = "\u001b[48;2;12;12;12m\u001b[38;2;164;164;164m";
+    string colorForeRed = "\u001b[38;2;210;55;55m";
     string colorForeGray = "\u001b[38;2;180;180;180m";
     string colorForeLightGray = "\u001b[38;2;240;240;216m";
     string colorForeSemiDark = "\u001b[38;2;120;120;120m";
@@ -104,13 +105,14 @@ public class MidiConsoleVisualizer
     Console.SetCursorPosition(1, 1);
     if (_midi.CurrentSongNameText.Length != 0) Console.Write($"{colorForeGray}{_midi.CurrentSongNameText}.MID  -  ");
     if (_midi.CurrentCopyrightText.Length != 0) Console.Write($"{colorForeGray}{_midi.CurrentCopyrightText}");
-    string programName = " MidiConsole 1.0.1 by Zacksony ";
+    string programName = " MidiConsole 1.0.2 by Zacksony ";
     Console.SetCursorPosition(_console.Width - programName.Length - 1, 1);
     Console.Write($"{colorForeGray}{programName}");
 
     Console.CursorLeft = 1;
     Console.CursorTop += 2;
-    Console.Write($"{colorForeGray}TEMPO: {colorForeLightGray}{_midi.CurrentBPM:0.00} BPM  " +
+    Console.Write($"{colorForeGray}PLAYSPEED: {(_midi.CurrentRealtimeSpeed >= 0.9 ? colorForeLightGray : colorForeRed)}{_midi.CurrentRealtimeSpeed:000.0000%}  " +
+                  $"{colorForeGray}TEMPO: {colorForeLightGray}{_midi.CurrentBPM:0.000} BPM  " +
                   $"{colorForeGray}BEAT: {colorForeLightGray}{_midi.CurrentSignatureNumerator} / {_midi.CurrentSignatureDenominator}  " +
                   $"{colorForeGray}TPQ: {colorForeLightGray}{_midi.TicksPerQuarterNote}  " +
                   $"{colorForeGray}TICK: {colorForeLightGray}{_midi.CurrentTick}  " +

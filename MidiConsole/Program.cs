@@ -9,10 +9,10 @@ namespace MidiConsole;
 
 internal static class Program
 {
-  private readonly static bool EnableAudio = false;
+  private readonly static bool EnableAudio = true;
   static void Main(string[] args)
   {
-    string midiFilePath = @"D:\MIDI\PROJ\Cyber Night\cyber-night.mid";
+    //string midiFilePath = @"D:\MIDI\PROJ\Cyber Night\cyber-night.mid";
     //string midiFilePath = @"D:\MIDI\MIDIs\Piano Songs\TB\THE ULTIMATE 200 ANIME SONGS PIANO MEDLEY [with l.mid";
     //string midiFilePath = @"D:\MIDI\Black MIDIs\EVANS_ZUMN_finished_AS.mid";
     //string midiFilePath = @"D:\MIDI\MIDIs\Abstract64-CarveYourOwnPath.msgs.mid";
@@ -27,6 +27,8 @@ internal static class Program
     //string midiFilePath = @"D:\MIDI\Black MIDIs\真っ黒フランドール・S 修正版.mid";
     //string midiFilePath = @"D:\MIDI\PROJ\Chain\Chain.mid";
     //string midiFilePath = @"D:\MIDI\MIDIs\メドレーに命をかけて.mid";
+    //string midiFilePath = @"D:\MIDI\Huge MIDIs\Two Faced Lovers 19.4 Million.mid";
+    string midiFilePath = @"D:\MIDI\Huge MIDIs\Fauvism Challenge 32.54 million, TheAtomicBomb&Quip.mid";
 
     byte[] midiBytes = File.ReadAllBytes(midiFilePath);
     using MemoryStream midiStream = new(midiBytes);
@@ -88,11 +90,14 @@ internal static class Program
       {
         while (!isPlaying) { /* Spin */ }
         watch.Restart();
+        ticksForNextJump = midi.ReadNextEvents(out events);
         double millisecondsForNextTick = ticksForNextJump * (double)midi.CurrentMillisecondsPerTick;
         if (EnableAudio && events != null) eventQueue?.Enqueue(events);
         while (watch.Elapsed.TotalMilliseconds < millisecondsForNextTick) { /* Spin */ }
+        watch.Stop();
+        midi.CurrentRealtimeSpeed = millisecondsForNextTick / watch.Elapsed.TotalMilliseconds;
       }
-      while ((ticksForNextJump = midi.ReadNextEvents(out events)) > 0);
+      while (ticksForNextJump > 0);
     });
 
     Task.WaitAll(drawingTask, midiTask, inputTask);

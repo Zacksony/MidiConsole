@@ -78,6 +78,8 @@ public unsafe class MidiReader : IDisposable
 
   public IReadOnlyList<IReadOnlyChannelState> CurrentChannelStates => _currentChannelStates;
 
+  public double CurrentRealtimeSpeed { get; set; }
+
   // TODO: current拍号
 
   public int ReadNextEvents(out IReadOnlyList<IEvent> events)
